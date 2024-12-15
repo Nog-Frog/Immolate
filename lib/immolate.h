@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <mach-o/dyld.h> // For _NSGetExecutablePath
 #ifdef _WIN32
     #include <windows.h>
     #define PATH_SEPARATOR "\\"
@@ -27,7 +28,7 @@
 #endif
 #include <limits.h>
 #include <string.h>
-#include <CL/cl.h>
+#include <OpenCL/cl.h>
 #define MAX_CODE_SIZE (1000000)
 
 void clErrCheck(cl_int err, char* msg) {
@@ -40,7 +41,7 @@ void clErrCheck(cl_int err, char* msg) {
 void getExecutableDir(char *dir) {
     #ifdef _WIN32
         // Windows specific code
-         if (GetModuleFileName(NULL, dir, MAX_PATH) != 0) {
+        if (GetModuleFileName(NULL, dir, MAX_PATH) != 0) {
             char* last_slash = strrchr(dir, '\\');
             if (last_slash != NULL) {
                 *last_slash = '\0';
@@ -59,7 +60,24 @@ void getExecutableDir(char *dir) {
             }
         } else {
             fprintf(stderr, "Error: Unable to get the current working directory\n");
-            // exit(EXIT_FAILURE);
+        }
+    #elif __APPLE__
+        // macOS specific code
+        uint32_t size = (uint32_t)(MAX_PATH);
+        if (_NSGetExecutablePath(dir, &size) == 0) {
+            char *real_path = realpath(dir, NULL); // Resolve symbolic links
+            if (real_path != NULL) {
+                strcpy(dir, real_path);
+                free(real_path); // Free memory allocated by realpath
+                char* last_slash = strrchr(dir, '/');
+                if (last_slash != NULL) {
+                    *last_slash = '\0';
+                }
+            } else {
+                fprintf(stderr, "Error: Unable to resolve executable path\n");
+            }
+        } else {
+            fprintf(stderr, "Error: Buffer size too small for executable path\n");
         }
     #else
         #error Platform not supported
